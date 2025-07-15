@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "kun-gateway/pkg/proto";
+
+// 数据面服务
+service DataPlaneService {
+  // 更新路由规则
+  rpc UpdateRoutes(UpdateRoutesRequest) returns (UpdateRoutesResponse);
+  
+  // 获取监控指标
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+}
+
+// 更新路由规则请求
+message UpdateRoutesRequest {
+  repeated Route routes = 1;
+}
+
+// 更新路由规则响应
+message UpdateRoutesResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 路由规则
+message Route {
+  string domain = 1;
+  string path = 2;
+  map<string, string> headers = 3;
+  repeated Upstream upstreams = 4;
+  map<string, int32> weight = 5;
+}
+
+// 上游服务
+message Upstream {
+  string name = 1;
+  repeated string addresses = 2;
+  int32 port = 3;
+  int32 weight = 4;
+  bool healthy = 5;
+}
+
+// 获取监控指标请求
+message GetMetricsRequest {
+  string domain = 1; // 可选，指定域名
+}
+
+// 获取监控指标响应
+message GetMetricsResponse {
+  int64 total_requests = 1;
+  int64 active_requests = 2;
+  int64 connection_count = 3;
+  LatencyMetrics latency = 4;
+  map<int32, int64> status_codes = 5;
+  map<string, DomainMetrics> domains = 6;
+}
+
+// 延迟指标
+message LatencyMetrics {
+  double avg_ms = 1;
+  double min_ms = 2;
+  double max_ms = 3;
+  int64 count = 4;
+}
+
+// 域名维度指标
+message DomainMetrics {
+  int64 requests = 1;
+  int64 bytes_in = 2;
+  int64 bytes_out = 3;
+  int64 success_count = 4;
+  int64 error_count = 5;
+  double avg_latency_ms = 6;
+} 

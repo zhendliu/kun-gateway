@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kun-gateway-controlplane
+  namespace: kube-system
+  labels:
+    app: kun-gateway
+    component: controlplane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kun-gateway
+      component: controlplane
+  template:
+    metadata:
+      labels:
+        app: kun-gateway
+        component: controlplane
+    spec:
+      containers:
+      - name: controlplane
+        image: kun-gateway:latest
+        command: ["./controlplane"]
+        args:
+        - "--port=9090"
+        - "--dataplane-url=http://localhost:8080"
+        - "--log-level=info"
+        ports:
+        - name: api
+          containerPort: 9090
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      serviceAccountName: kun-gateway-controlplane
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kun-gateway-controlplane
+  namespace: kube-system
+  labels:
+    app: kun-gateway
+    component: controlplane
+spec:
+  selector:
+    app: kun-gateway
+    component: controlplane
+  ports:
+  - name: api
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kun-gateway-controlplane
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kun-gateway-controlplane
+rules:
+- apiGroups: [""]
+  resources: ["services", "endpoints", "pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kun-gateway-controlplane
+subjects:
+- kind: ServiceAccount
+  name: kun-gateway-controlplane
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: kun-gateway-controlplane
+  apiGroup: rbac.authorization.k8s.io 

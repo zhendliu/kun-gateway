@@ -1,0 +1,78 @@
+/* 全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f5f7fa;
+}
+
+#app {
+  height: 100vh;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 卡片样式 */
+.el-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.el-card__header {
+  border-bottom: 1px solid #ebeef5;
+  padding: 15px 20px;
+}
+
+/* 表格样式 */
+.el-table {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 按钮样式 */
+.el-button {
+  border-radius: 6px;
+}
+
+/* 输入框样式 */
+.el-input__inner {
+  border-radius: 6px;
+}
+
+/* 标签页样式 */
+.el-tabs__item {
+  border-radius: 6px 6px 0 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .el-col {
+    margin-bottom: 20px;
+  }
+} 
