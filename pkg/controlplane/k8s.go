@@ -17,13 +17,15 @@ import (
 
 // K8sDiscovery K8s服务发现
 type K8sDiscovery struct {
-	client    *kubernetes.Clientset
-	log       *logrus.Logger
-	services  map[string]*ServiceInfo
-	endpoints map[string]*EndpointInfo
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
+	client         *kubernetes.Clientset
+	log            *logrus.Logger
+	services       map[string]*ServiceInfo
+	endpoints      map[string]*EndpointInfo
+	mu             sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	lastServiceRV  string // 记录Service的ResourceVersion
+	lastEndpointRV string // 记录Endpoint的ResourceVersion
 }
 
 // ServiceInfo 服务信息
@@ -87,12 +89,49 @@ func NewK8sDiscovery(log *logrus.Logger) (*K8sDiscovery, error) {
 func (k *K8sDiscovery) Start() error {
 	k.log.Info("启动K8s服务发现...")
 
+	// 先进行初始同步
+	if err := k.initialSync(); err != nil {
+		return fmt.Errorf("初始同步失败: %v", err)
+	}
+
 	// 启动Service监听
 	go k.watchServices()
 
 	// 启动Endpoint监听
 	go k.watchEndpoints()
 
+	return nil
+}
+
+// initialSync 初始同步现有资源
+func (k *K8sDiscovery) initialSync() error {
+	k.log.Info("开始初始同步...")
+
+	// 同步Services
+	services, err := k.client.CoreV1().Services("").List(k.ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("获取Services失败: %v", err)
+	}
+
+	for _, service := range services.Items {
+		k.updateService(&service)
+	}
+	k.lastServiceRV = services.ResourceVersion
+	k.log.Infof("同步了 %d 个Service", len(services.Items))
+
+	// 同步Endpoints
+	endpoints, err := k.client.CoreV1().Endpoints("").List(k.ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("获取Endpoints失败: %v", err)
+	}
+
+	for _, endpoint := range endpoints.Items {
+		k.updateEndpoint(&endpoint)
+	}
+	k.lastEndpointRV = endpoints.ResourceVersion
+	k.log.Infof("同步了 %d 个Endpoint", len(endpoints.Items))
+
+	k.log.Info("初始同步完成")
 	return nil
 }
 
@@ -116,7 +155,12 @@ func (k *K8sDiscovery) watchServices() {
 
 // watchServicesOnce 监听Service变化（单次）
 func (k *K8sDiscovery) watchServicesOnce() {
-	watcher, err := k.client.CoreV1().Services("").Watch(k.ctx, metav1.ListOptions{})
+	options := metav1.ListOptions{}
+	if k.lastServiceRV != "" {
+		options.ResourceVersion = k.lastServiceRV
+	}
+
+	watcher, err := k.client.CoreV1().Services("").Watch(k.ctx, options)
 	if err != nil {
 		k.log.Errorf("监听Service失败: %v", err)
 		time.Sleep(5 * time.Second)
@@ -140,6 +184,9 @@ func (k *K8sDiscovery) watchServicesOnce() {
 			}
 
 			key := fmt.Sprintf("%s/%s", service.Namespace, service.Name)
+
+			// 更新ResourceVersion
+			k.lastServiceRV = service.ResourceVersion
 
 			switch event.Type {
 			case watch.Added, watch.Modified:
@@ -167,7 +214,12 @@ func (k *K8sDiscovery) watchEndpoints() {
 
 // watchEndpointsOnce 监听Endpoint变化（单次）
 func (k *K8sDiscovery) watchEndpointsOnce() {
-	watcher, err := k.client.CoreV1().Endpoints("").Watch(k.ctx, metav1.ListOptions{})
+	options := metav1.ListOptions{}
+	if k.lastEndpointRV != "" {
+		options.ResourceVersion = k.lastEndpointRV
+	}
+
+	watcher, err := k.client.CoreV1().Endpoints("").Watch(k.ctx, options)
 	if err != nil {
 		k.log.Errorf("监听Endpoint失败: %v", err)
 		time.Sleep(5 * time.Second)
@@ -192,10 +244,28 @@ func (k *K8sDiscovery) watchEndpointsOnce() {
 
 			key := fmt.Sprintf("%s/%s", endpoint.Namespace, endpoint.Name)
 
+			// 更新ResourceVersion
+			k.lastEndpointRV = endpoint.ResourceVersion
+
 			switch event.Type {
 			case watch.Added, watch.Modified:
-				k.updateEndpoint(endpoint)
-				k.log.Infof("Endpoint更新: %s, 地址数量: %d", key, len(endpoint.Subsets))
+				// 检查是否有实际的端点地址
+				hasAddresses := false
+				for _, subset := range endpoint.Subsets {
+					if len(subset.Addresses) > 0 {
+						hasAddresses = true
+						break
+					}
+				}
+
+				// 只在有端点地址或者是有意义的服务时才打印日志
+				if hasAddresses || (endpoint.Name != "docker.io-hostpath" && endpoint.Name != "kubernetes") {
+					k.updateEndpoint(endpoint)
+					k.log.Infof("Endpoint更新: %s, 地址数量: %d", key, len(endpoint.Subsets))
+				} else {
+					// 静默更新没有端点的系统服务
+					k.updateEndpoint(endpoint)
+				}
 			case watch.Deleted:
 				k.deleteEndpoint(key)
 				k.log.Infof("Endpoint删除: %s", key)
