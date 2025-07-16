@@ -1,6 +1,6 @@
 # Kun Gateway
 
-一个基于Golang+Vue的云原生K8s流量网关系统，严格分离数据面（Data Plane）与控制面（Control Plane）。
+一个基于Golang+Vue的云原生K8s流量网关系统，严格分离数据面（Data Plane）与控制面（Control Plane），支持HTTP和HTTPS流量代理。
 
 ## 系统架构
 
@@ -10,7 +10,7 @@
 │  (Vue3+Go API)│  配置同步  │(Go 流量代理)  │
 └───────────────┘       └───────────────┘
         ▲                     ▲
-        │监控数据              │监听80端口(hostNetwork)
+        │监控数据              │监听80/443端口(hostNetwork)
 ┌──────┴──────┐       ┌──────┴──────┐
 │K8s API Server│       │  集群流量     │
 └──────────────┘       └──────────────┘
@@ -45,26 +45,40 @@
 - 服务健康状态监控
 - 支持服务筛选和搜索
 
+### 证书管理
+证书管理页面支持HTTPS证书的配置和管理：
+- 动态添加/删除SSL证书
+- 支持多域名证书配置
+- **Web界面上传证书文件**（支持.crt/.pem/.cer格式）
+- **Web界面上传私钥文件**（支持.key/.pem格式）
+- 证书状态监控
+
 ## 核心特性
 
 ### 数据面（Data Plane）
 - **高性能代理**: 使用fasthttp实现高并发转发
+- **HTTP/HTTPS支持**: 同时支持HTTP和HTTPS流量代理
+- **多域名HTTPS**: 支持SNI技术，一个端口监听多个域名，每个域名使用不同证书
 - **动态路由**: 支持域名+路径路由，Header路由，权重分配
+- **证书管理**: 支持动态加载和管理SSL证书
 - **原子更新**: 使用atomic.Value实现零中断配置更新
 - **监控指标**: 实时记录请求数、延迟、状态码等指标
-- **hostNetwork模式**: 监听宿主机80端口，支持DaemonSet部署
+- **hostNetwork模式**: 监听宿主机80/443端口，支持DaemonSet部署
 
 ### 控制面（Control Plane）
 - **K8s服务发现**: 自动监听Service和Endpoint变化
 - **可视化配置**: Vue3+Element Plus提供友好的Web界面
+- **证书管理**: 支持HTTPS证书的Web界面管理
 - **实时监控**: 图表展示系统运行状态和性能指标
-- **配置管理**: 支持路由规则的增删改查
+- **配置管理**: 支持路由规则和证书的增删改查
 
 ### 关键技术
 - **零中断更新**: 双路由表原子切换，避免Nginx式Reload
 - **自动发现**: 监听K8s API，实时获取Service和Pod信息
 - **负载均衡**: 支持轮询、权重、最小连接等策略
 - **健康检查**: 自动过滤不健康的Pod端点
+- **TLS终止**: 支持SSL证书的动态加载和SNI
+- **多域名支持**: 基于SNI技术的多域名HTTPS代理
 
 ## 快速开始
 
@@ -81,7 +95,7 @@ go mod download
 # 构建二进制文件
 make build
 
-# 启动数据面（需要sudo权限监听80端口）
+# 启动数据面（需要sudo权限监听80/443端口）
 sudo make run-dataplane
 
 # 启动控制面
@@ -125,13 +139,15 @@ kubectl get svc -n kube-system -l app=kun-gateway
 ### 数据面配置
 
 ```bash
-./dataplane --port=80 --api-port=8080 --log-level=info
+./dataplane --port=80 --https-port=443 --api-port=8080 --log-level=info --cert-dir=/etc/ssl/certs
 ```
 
 参数说明：
-- `--port`: 代理服务器监听端口（默认80）
+- `--port`: HTTP代理服务器监听端口（默认80）
+- `--https-port`: HTTPS代理服务器监听端口（默认443）
 - `--api-port`: API服务器监听端口（默认8080）
 - `--log-level`: 日志级别（debug/info/warn/error）
+- `--cert-dir`: 证书文件目录（默认/etc/ssl/certs）
 
 ### 控制面配置
 
@@ -152,6 +168,9 @@ kubectl get svc -n kube-system -l app=kun-gateway
 - `GET /api/v1/routes` - 获取路由规则
 - `PUT /api/v1/routes` - 更新路由规则
 - `GET /api/v1/metrics` - 获取监控指标
+- `GET /api/v1/certificates` - 获取证书列表
+- `POST /api/v1/certificates` - 添加证书
+- `DELETE /api/v1/certificates/:domain` - 删除证书
 
 ### 控制面API
 
@@ -163,6 +182,9 @@ kubectl get svc -n kube-system -l app=kun-gateway
 - `GET /api/v1/services` - 获取K8s服务
 - `GET /api/v1/endpoints` - 获取K8s端点
 - `GET /api/v1/metrics` - 获取监控数据
+- `GET /api/v1/certificates` - 获取证书配置
+- `POST /api/v1/certificates` - 创建证书
+- `DELETE /api/v1/certificates/:domain` - 删除证书
 
 ## 路由配置示例
 
@@ -180,6 +202,25 @@ kubectl get svc -n kube-system -l app=kun-gateway
 }
 ```
 
+## 证书配置示例
+
+### 通过Web界面上传证书
+1. 访问控制面Web界面
+2. 点击"证书管理"菜单
+3. 点击"添加证书"按钮
+4. 输入域名（如：example.com）
+5. 选择证书文件（.crt/.pem/.cer格式）
+6. 选择私钥文件（.key/.pem格式）
+7. 点击"确定"完成添加
+
+### 通过API上传证书
+```bash
+curl -X POST http://localhost:9090/api/v1/certificates \
+  -F "domain=example.com" \
+  -F "cert_file=@/path/to/example.com.crt" \
+  -F "key_file=@/path/to/example.com.key"
+```
+
 ## 监控指标
 
 系统提供以下监控指标：
@@ -188,12 +229,14 @@ kubectl get svc -n kube-system -l app=kun-gateway
 - **状态码分布**: 2xx/3xx/4xx/5xx状态码统计
 - **域名维度**: 按域名统计请求量、成功率、延迟
 - **上游健康**: 后端服务健康状态监控
+- **证书状态**: HTTPS证书有效性监控
 
 ## 性能指标
 
 - **配置更新延迟**: ≤1秒
 - **百万并发连接**: 内存占用 <500MB
 - **灰度发布精度**: Header触发路由比例误差 <5%
+- **HTTPS性能**: TLS握手延迟 <10ms
 
 ## 开发指南
 
@@ -241,6 +284,7 @@ make help
    ```bash
    # 检查端口占用
    sudo lsof -i :80
+   sudo lsof -i :443
    sudo lsof -i :8080
    ```
 
@@ -254,6 +298,15 @@ make help
    ```bash
    # 检查日志
    kubectl logs -n kube-system -l app=kun-gateway,component=dataplane
+   ```
+
+4. **HTTPS证书问题**
+   ```bash
+   # 检查证书文件权限
+   ls -la /etc/ssl/certs/
+   
+   # 验证证书有效性
+   openssl x509 -in /etc/ssl/certs/example.com.crt -text -noout
    ```
 
 ## 贡献指南

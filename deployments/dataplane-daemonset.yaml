@@ -24,15 +24,24 @@ spec:
         command: ["./dataplane"]
         args:
         - "--port=80"
+        - "--https-port=443"
         - "--api-port=8080"
         - "--log-level=info"
+        - "--cert-dir=/etc/ssl/certs"
         ports:
         - name: http
           containerPort: 80
           hostPort: 80  # 监听宿主机80端口
+        - name: https
+          containerPort: 443
+          hostPort: 443  # 监听宿主机443端口
         - name: api
           containerPort: 8080
           hostPort: 8080
+        volumeMounts:
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs
+          readOnly: true
         resources:
           requests:
             memory: "128Mi"
@@ -56,6 +65,11 @@ spec:
           capabilities:
             add:
             - NET_ADMIN  # 需要网络管理权限
+      volumes:
+      - name: ssl-certs
+        hostPath:
+          path: /etc/ssl/certs
+          type: Directory
       serviceAccountName: kun-gateway-dataplane
 ---
 apiVersion: v1

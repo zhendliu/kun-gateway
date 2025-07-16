@@ -1,35 +1,45 @@
-import { createRouter, createWebHistory } from "vue-router";
-import Dashboard from "../views/Dashboard.vue";
-import Routes from "../views/Routes.vue";
-import Services from "../views/Services.vue";
-import Metrics from "../views/Metrics.vue";
+import { createRouter, createWebHistory } from 'vue-router'
+import Dashboard from '@/views/Dashboard.vue'
+import Routes from '@/views/Routes.vue'
+import Services from '@/views/Services.vue'
+import Metrics from '@/views/Metrics.vue'
+import Certificates from '@/views/Certificates.vue'
 
 const routes = [
   {
-    path: "/",
-    name: "Dashboard",
-    component: Dashboard,
+    path: '/',
+    redirect: '/dashboard'
   },
   {
-    path: "/routes",
-    name: "Routes",
-    component: Routes,
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: Dashboard
   },
   {
-    path: "/services",
-    name: "Services",
-    component: Services,
+    path: '/routes',
+    name: 'Routes',
+    component: Routes
   },
   {
-    path: "/metrics",
-    name: "Metrics",
-    component: Metrics,
+    path: '/services',
+    name: 'Services',
+    component: Services
   },
-];
+  {
+    path: '/metrics',
+    name: 'Metrics',
+    component: Metrics
+  },
+  {
+    path: '/certificates',
+    name: 'Certificates',
+    component: Certificates
+  }
+]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes,
-});
+  routes
+})
 
-export default router;
+export default router

@@ -1,7 +1,9 @@
 package controlplane
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +41,11 @@ func (api *ControlPlaneAPI) Start(addr string) error {
 	r.POST("/api/v1/routes", api.createRoute)
 	r.PUT("/api/v1/routes/:id", api.updateRoute)
 	r.DELETE("/api/v1/routes/:id", api.deleteRoute)
+
+	// 证书管理
+	r.GET("/api/v1/certificates", api.getCertificates)
+	r.POST("/api/v1/certificates", api.createCertificate)
+	r.DELETE("/api/v1/certificates/:domain", api.deleteCertificate)
 
 	// K8s服务发现
 	r.GET("/api/v1/services", api.getServices)
@@ -187,6 +194,137 @@ func (api *ControlPlaneAPI) deleteRoute(c *gin.Context) {
 		"success": true,
 		"message": "路由删除成功",
 		"id":      id,
+	})
+}
+
+// CertificateConfig 证书配置
+type CertificateConfig struct {
+	Domain   string    `json:"domain"`
+	CertFile string    `json:"cert_file"`
+	KeyFile  string    `json:"key_file"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// getCertificates 获取所有证书配置
+func (api *ControlPlaneAPI) getCertificates(c *gin.Context) {
+	certificates, err := api.dataplaneClient.GetCertificates()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "获取证书失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"certificates": certificates,
+	})
+}
+
+// createCertificate 创建证书配置
+func (api *ControlPlaneAPI) createCertificate(c *gin.Context) {
+	// 获取上传的文件
+	certFile, err := c.FormFile("cert_file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "获取证书文件失败: " + err.Error(),
+		})
+		return
+	}
+
+	keyFile, err := c.FormFile("key_file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "获取私钥文件失败: " + err.Error(),
+		})
+		return
+	}
+
+	domain := c.PostForm("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "域名不能为空",
+		})
+		return
+	}
+
+	// 创建临时目录保存证书文件
+	tempDir := fmt.Sprintf("/tmp/certs/%s", domain)
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "创建临时目录失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 保存证书文件
+	certPath := fmt.Sprintf("%s/%s.crt", tempDir, domain)
+	if err := c.SaveUploadedFile(certFile, certPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "保存证书文件失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 保存私钥文件
+	keyPath := fmt.Sprintf("%s/%s.key", tempDir, domain)
+	if err := c.SaveUploadedFile(keyFile, keyPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "保存私钥文件失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 推送到数据面
+	err = api.dataplaneClient.AddCertificate(domain, certPath, keyPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "添加证书失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "证书添加成功",
+		"domain":  domain,
+	})
+}
+
+// deleteCertificate 删除证书配置
+func (api *ControlPlaneAPI) deleteCertificate(c *gin.Context) {
+	domain := c.Param("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "域名参数不能为空",
+		})
+		return
+	}
+
+	// 从数据面移除证书
+	err := api.dataplaneClient.RemoveCertificate(domain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "移除证书失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "证书移除成功",
+		"domain":  domain,
 	})
 }
 

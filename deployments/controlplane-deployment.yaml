@@ -29,6 +29,9 @@ spec:
         ports:
         - name: api
           containerPort: 9090
+        volumeMounts:
+        - name: cert-temp
+          mountPath: /tmp/certs
         resources:
           requests:
             memory: "256Mi"
@@ -48,6 +51,9 @@ spec:
             port: 9090
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: cert-temp
+        emptyDir: {}
       serviceAccountName: kun-gateway-controlplane
 ---
 apiVersion: v1

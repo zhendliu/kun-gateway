@@ -150,3 +150,110 @@ func (c *DataPlaneClient) HealthCheck() error {
 
 	return nil
 }
+
+// GetCertificates 获取证书列表
+func (client *DataPlaneClient) GetCertificates() ([]string, error) {
+	resp, err := client.client.Get(client.baseURL + "/api/v1/certificates")
+	if err != nil {
+		return nil, fmt.Errorf("请求证书列表失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("获取证书列表失败，状态码: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Success      bool     `json:"success"`
+		Certificates []string `json:"certificates"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("解析证书列表响应失败: %v", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("获取证书列表失败")
+	}
+
+	return result.Certificates, nil
+}
+
+// AddCertificate 添加证书
+func (client *DataPlaneClient) AddCertificate(domain, certFile, keyFile string) error {
+	data := map[string]string{
+		"domain":    domain,
+		"cert_file": certFile,
+		"key_file":  keyFile,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("序列化证书数据失败: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", client.baseURL+"/api/v1/certificates", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("创建添加证书请求失败: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("添加证书请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("添加证书失败，状态码: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("解析添加证书响应失败: %v", err)
+	}
+
+	if !result.Success {
+		return fmt.Errorf("添加证书失败: %s", result.Message)
+	}
+
+	return nil
+}
+
+// RemoveCertificate 移除证书
+func (client *DataPlaneClient) RemoveCertificate(domain string) error {
+	req, err := http.NewRequest("DELETE", client.baseURL+"/api/v1/certificates/"+domain, nil)
+	if err != nil {
+		return fmt.Errorf("创建删除请求失败: %v", err)
+	}
+
+	resp, err := client.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("移除证书请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("移除证书失败，状态码: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("解析移除证书响应失败: %v", err)
+	}
+
+	if !result.Success {
+		return fmt.Errorf("移除证书失败: %s", result.Message)
+	}
+
+	return nil
+}

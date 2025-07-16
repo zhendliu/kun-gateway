@@ -35,6 +35,11 @@ func (api *APIServer) Start(addr string) error {
 	r.PUT("/api/v1/routes", api.updateRoutes)
 	r.GET("/api/v1/routes", api.getRoutes)
 
+	// 证书管理API
+	r.POST("/api/v1/certificates", api.addCertificate)
+	r.DELETE("/api/v1/certificates/:domain", api.removeCertificate)
+	r.GET("/api/v1/certificates", api.listCertificates)
+
 	// 监控指标API
 	r.GET("/api/v1/metrics", api.getMetrics)
 	r.GET("/api/v1/health", api.healthCheck)
@@ -115,5 +120,74 @@ func (api *APIServer) healthCheck(c *gin.Context) {
 		"status":    "healthy",
 		"timestamp": time.Now().Unix(),
 		"service":   "dataplane",
+	})
+}
+
+// CertificateRequest 证书请求
+type CertificateRequest struct {
+	Domain   string `json:"domain" binding:"required"`
+	CertFile string `json:"cert_file" binding:"required"`
+	KeyFile  string `json:"key_file" binding:"required"`
+}
+
+// addCertificate 添加HTTPS证书
+func (api *APIServer) addCertificate(c *gin.Context) {
+	var req CertificateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "请求参数错误: " + err.Error(),
+		})
+		return
+	}
+
+	api.log.Infof("添加HTTPS证书，域名: %s", req.Domain)
+
+	// 添加证书到代理服务器
+	err := api.proxy.AddCertificate(req.Domain, req.CertFile, req.KeyFile)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "添加证书失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "证书添加成功",
+		"domain":  req.Domain,
+	})
+}
+
+// removeCertificate 移除HTTPS证书
+func (api *APIServer) removeCertificate(c *gin.Context) {
+	domain := c.Param("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "域名参数不能为空",
+		})
+		return
+	}
+
+	api.log.Infof("移除HTTPS证书，域名: %s", domain)
+
+	// 从代理服务器移除证书
+	api.proxy.RemoveCertificate(domain)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "证书移除成功",
+		"domain":  domain,
+	})
+}
+
+// listCertificates 列出所有证书
+func (api *APIServer) listCertificates(c *gin.Context) {
+	domains := api.proxy.certManager.ListCertificates()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"certificates": domains,
 	})
 }

@@ -82,6 +82,26 @@ func (r *Router) FindRoute(ctx *fasthttp.RequestCtx) *RouteRule {
 	return nil
 }
 
+// FindRouteByDomain 根据域名和路径查找路由规则（用于HTTP请求）
+func (r *Router) FindRouteByDomain(domain, path string) *RouteRule {
+	table := r.rules.Load().(*RouteTable)
+
+	// 精确匹配
+	key := domain + path
+	if rule, exists := table.Rules[key]; exists {
+		return rule
+	}
+
+	// 域名匹配
+	for _, rule := range table.Rules {
+		if rule.Domain == domain {
+			return rule
+		}
+	}
+
+	return nil
+}
+
 // GetUpstream 根据权重选择上游服务
 func (r *Router) GetUpstream(rule *RouteRule, headers map[string]string) *Upstream {
 	// 检查Header路由

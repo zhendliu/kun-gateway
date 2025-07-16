@@ -59,7 +59,7 @@ undeploy:
 # 运行数据面（本地开发）
 run-dataplane:
 	@echo "启动数据面..."
-	./bin/dataplane --port=80 --api-port=8080 --log-level=debug
+	./bin/dataplane --port=80 --https-port=443 --api-port=8080 --log-level=debug
 
 # 运行控制面（本地开发）
 run-controlplane:
@@ -100,9 +100,11 @@ deps:
 	go mod download
 	@echo "依赖更新完成"
 
-# 帮助信息
+# 查看帮助
 help:
-	@echo "可用的命令:"
+	@echo "Kun Gateway 构建脚本"
+	@echo ""
+	@echo "可用命令:"
 	@echo "  build          - 构建Go二进制文件"
 	@echo "  clean          - 清理构建产物"
 	@echo "  test           - 运行测试"
@@ -110,12 +112,29 @@ help:
 	@echo "  docker-push    - 推送Docker镜像"
 	@echo "  deploy         - 部署到K8s"
 	@echo "  undeploy       - 删除K8s部署"
-	@echo "  run-dataplane  - 运行数据面（本地）"
-	@echo "  run-controlplane - 运行控制面（本地）"
-	@echo "  run-frontend   - 运行前端（本地）"
+	@echo "  run-dataplane  - 启动数据面（本地开发）"
+	@echo "  run-controlplane - 启动控制面（本地开发）"
+	@echo "  run-frontend   - 启动前端（本地开发）"
 	@echo "  install-frontend - 安装前端依赖"
 	@echo "  build-frontend - 构建前端"
 	@echo "  fmt            - 格式化代码"
 	@echo "  lint           - 代码检查"
 	@echo "  deps           - 更新依赖"
-	@echo "  help           - 显示帮助信息" 
+	@echo "  generate-certs - 生成测试证书"
+	@echo "  test-https     - 测试多域名HTTPS功能"
+	@echo "  help           - 显示帮助信息"
+
+# 生成测试证书
+generate-certs:
+	@echo "生成测试证书..."
+	./scripts/generate-test-certs.sh
+
+# 测试多域名HTTPS功能
+test-https:
+	@echo "测试多域名HTTPS功能..."
+	./scripts/test-multi-domain-https.sh
+
+# 测试多域名HTTPS功能（指定IP）
+test-https-ip:
+	@echo "测试多域名HTTPS功能（指定IP）..."
+	./scripts/test-multi-domain-https.sh -i $(GATEWAY_IP) -p 443 

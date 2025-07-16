@@ -13,9 +13,11 @@ import (
 )
 
 var (
-	port     = flag.Int("port", 80, "代理服务器监听端口")
+	port     = flag.Int("port", 80, "HTTP代理服务器监听端口")
+	httpsPort = flag.Int("https-port", 443, "HTTPS代理服务器监听端口")
 	apiPort  = flag.Int("api-port", 8080, "API服务器监听端口")
 	logLevel = flag.String("log-level", "info", "日志级别")
+	certDir  = flag.String("cert-dir", "/etc/ssl/certs", "证书文件目录")
 )
 
 func main() {
@@ -53,11 +55,19 @@ func main() {
 		}
 	}()
 
-	// 启动代理服务器
+	// 启动HTTP代理服务器
 	go func() {
 		proxyAddr := fmt.Sprintf(":%d", *port)
 		if err := proxy.Start(proxyAddr); err != nil {
-			log.Fatalf("启动代理服务器失败: %v", err)
+			log.Fatalf("启动HTTP代理服务器失败: %v", err)
+		}
+	}()
+
+	// 启动HTTPS代理服务器
+	go func() {
+		httpsAddr := fmt.Sprintf(":%d", *httpsPort)
+		if err := proxy.StartTLS(httpsAddr); err != nil {
+			log.Warnf("启动HTTPS代理服务器失败: %v", err)
 		}
 	}()
 
